@@ -1,6 +1,6 @@
 export default function ({ adapter, data }, { tests, test, assert }) {
   tests('多层对象处理', () => {
-    const now = new Date()
+    const now = new Date();
     test('多层常规对象数据适配处理', () => {
       const data = {
         data1: {
@@ -13,20 +13,23 @@ export default function ({ adapter, data }, { tests, test, assert }) {
           },
         },
         value1: '999',
-      }
-      const nextData = adapter({
-        data1: {
-          $key: 'data1Copy',
-          data2: {
-            data3: {
-              value1: 'enum:中国,美国,日本',
-              value2: { $emap: { yes: '是', no: '否' } },
-              value3: (value) => String(value),
+      };
+      const nextData = adapter(
+        {
+          data1: {
+            $key: 'data1Copy',
+            data2: {
+              data3: {
+                value1: 'enum:中国,美国,日本',
+                value2: { $emap: { yes: '是', no: '否' } },
+                value3: (value) => String(value),
+              },
             },
           },
+          value1: Number,
         },
-        value1: Number,
-      }, data)
+        data
+      );
       assert.isEqual(nextData, {
         data1Copy: {
           data2: {
@@ -38,8 +41,8 @@ export default function ({ adapter, data }, { tests, test, assert }) {
           },
         },
         value1: 999,
-      })
-    })
+      });
+    });
 
     test('多层数组对象数据适配处理', () => {
       const data = [
@@ -49,20 +52,12 @@ export default function ({ adapter, data }, { tests, test, assert }) {
             {
               name: '水浒传',
               price: 1.12,
-              contents: [
-                '武松喝醉酒',
-                '路过景阳岗',
-                '打死了大虫',
-              ],
+              contents: ['武松喝醉酒', '路过景阳岗', '打死了大虫'],
             },
             {
               name: '西游记',
               price: 9.9,
-              contents: [
-                '天蚕石猴',
-                '一阵巨响',
-                '捅破上苍',
-              ],
+              contents: ['天蚕石猴', '一阵巨响', '捅破上苍'],
             },
           ],
         },
@@ -72,30 +67,30 @@ export default function ({ adapter, data }, { tests, test, assert }) {
             {
               name: '红楼梦',
               price: null,
-              contents: [
-                '不明所以',
-              ],
+              contents: ['不明所以'],
             },
             {
               name: '三国演义',
               price: 6.66,
-              contents: [
-                '桃园三结义',
-                '温酒斩华雄',
-                '火烧大赤壁',
-              ],
+              contents: ['桃园三结义', '温酒斩华雄', '火烧大赤壁'],
             },
           ],
         },
-      ]
-      const nextData = adapter({
-        name: 'key:userName',
-        books: {
-          name: 'bookName',
-          price: { $default: '未知', $value: (value) => `${value.toFixed(2)}元` },
-          contents: (value) => value.join(','),
+      ];
+      const nextData = adapter(
+        {
+          name: 'key:userName',
+          books: {
+            name: 'bookName',
+            price: {
+              $default: '未知',
+              $value: (value) => `${value.toFixed(2)}元`,
+            },
+            contents: (value) => value.join(','),
+          },
         },
-      }, data)
+        data
+      );
       assert.isEqual(nextData, [
         {
           userName: '张三',
@@ -103,20 +98,12 @@ export default function ({ adapter, data }, { tests, test, assert }) {
             {
               bookName: '水浒传',
               price: '1.12元',
-              contents: [
-                '武松喝醉酒',
-                '路过景阳岗',
-                '打死了大虫',
-              ].join(),
+              contents: ['武松喝醉酒', '路过景阳岗', '打死了大虫'].join(),
             },
             {
               bookName: '西游记',
               price: '9.90元',
-              contents: [
-                '天蚕石猴',
-                '一阵巨响',
-                '捅破上苍',
-              ].join(),
+              contents: ['天蚕石猴', '一阵巨响', '捅破上苍'].join(),
             },
           ],
         },
@@ -126,22 +113,16 @@ export default function ({ adapter, data }, { tests, test, assert }) {
             {
               bookName: '红楼梦',
               price: '未知',
-              contents: [
-                '不明所以',
-              ].join(),
+              contents: ['不明所以'].join(),
             },
             {
               bookName: '三国演义',
               price: '6.66元',
-              contents: [
-                '桃园三结义',
-                '温酒斩华雄',
-                '火烧大赤壁',
-              ].join(),
+              contents: ['桃园三结义', '温酒斩华雄', '火烧大赤壁'].join(),
             },
           ],
         },
-      ])
-    })
-  })
+      ]);
+    });
+  });
 }

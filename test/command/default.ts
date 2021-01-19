@@ -30,8 +30,7 @@ export default function ({ adapter, data }, { tests, test, assert }) {
         },
         data
       );
-
-      expect(nextData.books).toEqual([
+      assert.isEqual(nextData.books, [
         { price: '100.00元' },
         { price: '100.00元' },
       ]);

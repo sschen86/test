@@ -5,34 +5,28 @@ export default function ({ adapter, data }, { tests, test, assert }) {
       list: [
         {
           name: '张三',
-          books: [
-            { name: '水浒传' },
-            { name: '西游记' },
-          ],
+          books: [{ name: '水浒传' }, { name: '西游记' }],
         },
         {
           name: '李四',
-          books: [
-            { name: '三国演义' },
-            { name: '红楼梦' },
-
-          ],
+          books: [{ name: '三国演义' }, { name: '红楼梦' }],
         },
       ],
-    }
+    };
     test('读取环境变量：$value指令', () => {
-      const nextData = adapter({
-        list: {
-          name: (value, { row, index, root }) => {
-            return {
+      const nextData = adapter(
+        {
+          list: {
+            name: (value, { row, index, root }) => ({
               value,
               row,
               index,
               root,
-            }
+            }),
           },
         },
-      }, data)
+        data
+      );
       assert.isEqual(nextData, {
         list: [
           {
@@ -51,31 +45,31 @@ export default function ({ adapter, data }, { tests, test, assert }) {
               root: data,
             },
           },
-
         ],
-      })
-    })
+      });
+    });
 
     test('读取环境变量：$default指令', () => {
       const data = {
         type: 1,
-        list: [
-          { name: null, books: [ '水浒传', '西游记' ] },
-        ],
-      }
-      const nextData = adapter({
-        list: {
-          name: {
-            $default ({ root, index, row }) {
-              return {
-                type: root.type,
-                index: index,
-                books: row.books,
-              }
+        list: [{ name: null, books: ['水浒传', '西游记'] }],
+      };
+      const nextData = adapter(
+        {
+          list: {
+            name: {
+              $default({ root, index, row }) {
+                return {
+                  type: root.type,
+                  index,
+                  books: row.books,
+                };
+              },
             },
           },
         },
-      }, data)
+        data
+      );
 
       assert.isEqual(nextData, {
         list: [
@@ -87,24 +81,27 @@ export default function ({ adapter, data }, { tests, test, assert }) {
             },
           },
         ],
-      })
-    })
+      });
+    });
 
     test('读取环境变量：$format指令 - 匿名', () => {
-      const nextData = adapter({
-        list: {
-          name: {
-            $format (value, { row, index, root }) {
-              return {
-                value,
-                row,
-                index,
-                root,
-              }
+      const nextData = adapter(
+        {
+          list: {
+            name: {
+              $format(value, { row, index, root }) {
+                return {
+                  value,
+                  row,
+                  index,
+                  root,
+                };
+              },
             },
           },
         },
-      }, data)
+        data
+      );
       assert.isEqual(nextData, {
         list: [
           {
@@ -124,27 +121,31 @@ export default function ({ adapter, data }, { tests, test, assert }) {
             },
           },
         ],
-      })
-    })
+      });
+    });
 
     test('读取环境变量：$format指令 - 具名', () => {
-      adapter.addFormat('testForRuntime', (value, { row, index, root }, arg1, arg2) => {
-        return {
+      adapter.addFormat(
+        'testForRuntime',
+        (value, { row, index, root }, arg1, arg2) => ({
           value,
           row,
           index,
           root,
           arg1,
           arg2,
-        }
-      })
-      const nextData = adapter({
-        list: {
-          name: {
-            $format: [ { name: 'testForRuntime', args: [ 1, 2 ] } ],
+        })
+      );
+      const nextData = adapter(
+        {
+          list: {
+            name: {
+              $format: [{ name: 'testForRuntime', args: [1, 2] }],
+            },
           },
         },
-      }, data)
+        data
+      );
       assert.isEqual(nextData, {
         list: [
           {
@@ -168,8 +169,8 @@ export default function ({ adapter, data }, { tests, test, assert }) {
             },
           },
         ],
-      })
-    })
+      });
+    });
 
     // test('读取环境变量：$increase.$value指令', () => {
     //   const nextData = adapter({
@@ -270,5 +271,5 @@ export default function ({ adapter, data }, { tests, test, assert }) {
     //     books: [ { name: '西游记' }, { name: '水浒传' } ],
     //   })
     // })
-  })
+  });
 }

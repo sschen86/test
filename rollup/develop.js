@@ -9,7 +9,7 @@ import external from './external';
 const extensions = ['.js', '.ts'];
 
 export default {
-  input: './src/index.ts', // 入口文件
+  input: './playground/index.ts', // 入口文件
   output: {
     // 出口文件
     file: './temp/index.bundle.js',
@@ -31,7 +31,7 @@ export default {
             corejs: 3,
           },
         ],
-        '@babel/preset-typescript',
+        ['@babel/preset-typescript', {}],
       ],
       plugins: [
         // '@babel/plugin-proposal-class-properties',

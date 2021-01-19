@@ -10,20 +10,26 @@ export default function ({ adapter, data }, { tests, test, assert }) {
           { name: '西游记', type: 'm2', price: 60 },
           { name: '三国演义', type: 'm3', price: null },
         ],
-        address: [ '浙江省', '杭州市', '江干区', '火车东站旁' ],
-      }
+        address: ['浙江省', '杭州市', '江干区', '火车东站旁'],
+      };
 
-      const nextData = adapter({
-        user: 'name',
-        sex: { $enum: [ '先生', '女士', '保密' ] },
-        age: Number,
-        books: {
-          name: true,
-          type: { $emap: { m1: '武侠小说', m2: '神话小说', m3: '历史小说' } },
-          price: { $default: '未知', $value: (value) => `￥${value.toFixed(2)}` },
+      const nextData = adapter(
+        {
+          user: 'name',
+          sex: { $enum: ['先生', '女士', '保密'] },
+          age: Number,
+          books: {
+            name: true,
+            type: { $emap: { m1: '武侠小说', m2: '神话小说', m3: '历史小说' } },
+            price: {
+              $default: '未知',
+              $value: (value) => `￥${value.toFixed(2)}`,
+            },
+          },
+          address: (value) => value.join(''),
         },
-        address: (value) => value.join(''),
-      }, data)
+        data
+      );
 
       assert.isEqual(nextData, {
         name: '张三',
@@ -35,17 +41,20 @@ export default function ({ adapter, data }, { tests, test, assert }) {
           { name: '三国演义', type: '历史小说', price: '未知' },
         ],
         address: '浙江省杭州市江干区火车东站旁',
-      })
-    })
+      });
+    });
 
     test('常规示例', () => {
-      adapter.addFormat('dateDefault', (value, ctx, format) => { // 添加预设的格式化规则，后期可以快速调用
-        value = new Date(value)
+      adapter.addFormat('dateDefault', (value, ctx, format) => {
+        // 添加预设的格式化规则，后期可以快速调用
+        value = new Date(value);
         if (format === 'YYYY') {
-          return value.getFullYear()
+          return value.getFullYear();
         }
-        return `${value.getFullYear()}/${value.getMonth() + 1}/${value.getDate()}`
-      })
+        return `${value.getFullYear()}/${
+          value.getMonth() + 1
+        }/${value.getDate()}`;
+      });
 
       const data = {
         data1: [
@@ -58,11 +67,11 @@ export default function ({ adapter, data }, { tests, test, assert }) {
             goodsSkuList: [
               {
                 id: 1000,
-                attrs: [ '红色', 'XXL' ],
+                attrs: ['红色', 'XXL'],
               },
               {
                 id: 1001,
-                attrs: [ '黑色', 'XXL' ],
+                attrs: ['黑色', 'XXL'],
               },
             ],
             isSale: 1,
@@ -78,11 +87,11 @@ export default function ({ adapter, data }, { tests, test, assert }) {
             goodsSkuList: [
               {
                 id: 1000,
-                attrs: [ '红色', 'XXL' ],
+                attrs: ['红色', 'XXL'],
               },
               {
                 id: 1001,
-                attrs: [ '黑色', 'XXL' ],
+                attrs: ['黑色', 'XXL'],
               },
             ],
             isSale: 0,
@@ -93,28 +102,31 @@ export default function ({ adapter, data }, { tests, test, assert }) {
         discardField1: null,
         discardField2: null,
         provinces: '中国,美国,日本',
-      }
+      };
 
-      const nextData = adapter({
-        data1: {
-          $key: 'list', // 重命名data1 => list
-          goodsCode: 'code', // 重命名goodsCode => code
-          goodsTitle: {
-            $key: 'title',
-            $value: (value) => `标题：${value}`, // 进行重命名和数据格式化，可以通过扩展来生成速写指令`key:title #prepend:标题：`
+      const nextData = adapter(
+        {
+          data1: {
+            $key: 'list', // 重命名data1 => list
+            goodsCode: 'code', // 重命名goodsCode => code
+            goodsTitle: {
+              $key: 'title',
+              $value: (value) => `标题：${value}`, // 进行重命名和数据格式化，可以通过扩展来生成速写指令`key:title #prepend:标题：`
+            },
+            price: (value) => `￥${value.toFixed(2)}`, // 进行数据格式
+            goodsType: { $emap: { normal: '常规商品', virtual: '虚拟商品' } }, // 进行映射转化，速写指令`emap:normal:常规商品,virtual:虚拟商品`
+            goodsStatus: { $enum: [null, '销售中', '已下架', '缺货'] }, // 进行枚举转化，速写指令`enum:,销售中,已下架,缺货`
+            goodsSkuList: (value) => value.map((item) => item.attrs.join('-')), // 对数组的值直接处理
+            isSale: Boolean, // 类型
+            createTime: '#dateDefault', // 无参数预设格式化处理
+            modifyTime: { $default: '无', $format: 'dateDefault:YYYY' }, // 速写指令`default:无 #dateDefault:YYYY`
           },
-          price: (value) => `￥${value.toFixed(2)}`, // 进行数据格式
-          goodsType: { $emap: { normal: '常规商品', virtual: '虚拟商品' } }, // 进行映射转化，速写指令`emap:normal:常规商品,virtual:虚拟商品`
-          goodsStatus: { $enum: [ null, '销售中', '已下架', '缺货' ] }, // 进行枚举转化，速写指令`enum:,销售中,已下架,缺货`
-          goodsSkuList: (value) => value.map(item => item.attrs.join('-')), // 对数组的值直接处理
-          isSale: Boolean, // 类型
-          createTime: '#dateDefault', // 无参数预设格式化处理
-          modifyTime: { $default: '无', $format: 'dateDefault:YYYY' }, // 速写指令`default:无 #dateDefault:YYYY`
-        },
 
-        // 转换成数组，可以通过扩展生成速写指令`#toArray`,`{$format:{name:toArray, args:[/,\s*/]}}`
-        provinces: (value) => value.split(','),
-      }, data)
+          // 转换成数组，可以通过扩展生成速写指令`#toArray`,`{$format:{name:toArray, args:[/,\s*/]}}`
+          provinces: (value) => value.split(','),
+        },
+        data
+      );
 
       assert.isEqual(nextData, {
         list: [
@@ -124,10 +136,7 @@ export default function ({ adapter, data }, { tests, test, assert }) {
             price: '￥1.20',
             goodsType: '常规商品',
             goodsStatus: '销售中',
-            goodsSkuList: [
-              '红色-XXL',
-              '黑色-XXL',
-            ],
+            goodsSkuList: ['红色-XXL', '黑色-XXL'],
             isSale: true,
             createTime: '2019/6/29',
             modifyTime: '无',
@@ -138,17 +147,14 @@ export default function ({ adapter, data }, { tests, test, assert }) {
             price: '￥2.20',
             goodsType: '虚拟商品',
             goodsStatus: '已下架',
-            goodsSkuList: [
-              '红色-XXL',
-              '黑色-XXL',
-            ],
+            goodsSkuList: ['红色-XXL', '黑色-XXL'],
             isSale: false,
             createTime: '2019/6/29',
             modifyTime: 2019,
           },
         ],
-        provinces: [ '中国', '美国', '日本' ],
-      })
-    })
-  })
+        provinces: ['中国', '美国', '日本'],
+      });
+    });
+  });
 }

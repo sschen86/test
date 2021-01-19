@@ -3,10 +3,7 @@ export default function ({ adapter, now }, { tests, test, assert }) {
     const data = {
       data1: {
         data: {
-          c: [
-            { a: 1 },
-            { a: 1 },
-          ],
+          c: [{ a: 1 }, { a: 1 }],
           b: '1.00',
         },
         value: now,
@@ -16,47 +13,46 @@ export default function ({ adapter, now }, { tests, test, assert }) {
         value2: 2,
       },
       value: 3,
-    }
+    };
     test('默认strict模式适配', () => {
-      const nextData = adapter({
-        data1: {
-          data: {
-            c: {
-              a: 'xxx',
+      const nextData = adapter(
+        {
+          data1: {
+            data: {
+              c: {
+                a: 'xxx',
+              },
             },
           },
         },
-      }, data)
+        data
+      );
       assert.isEqual(nextData, {
         data1: {
           data: {
-            c: [
-              { xxx: 1 },
-              { xxx: 1 },
-            ],
+            c: [{ xxx: 1 }, { xxx: 1 }],
           },
         },
-      })
-    })
+      });
+    });
     test('关闭stricr模式适配', () => {
-      const nextData = adapter({
-        $strict: false,
-        data1: {
-          data: {
-            c: {
-              a: 'xxx',
+      const nextData = adapter(
+        {
+          $strict: false,
+          data1: {
+            data: {
+              c: {
+                a: 'xxx',
+              },
             },
-
           },
         },
-      }, data)
+        data
+      );
       assert.isEqual(nextData, {
         data1: {
           data: {
-            c: [
-              { xxx: 1 },
-              { xxx: 1 },
-            ],
+            c: [{ xxx: 1 }, { xxx: 1 }],
             b: '1.00',
           },
           value: now,
@@ -66,7 +62,7 @@ export default function ({ adapter, now }, { tests, test, assert }) {
           value2: 2,
         },
         value: 3,
-      })
-    })
-  })
+      });
+    });
+  });
 }
