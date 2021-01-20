@@ -12,5 +12,8 @@ function adapter(setting, data) {
 adapter.addEnum = globalAdapter.addEnum;
 adapter.addEmap = globalAdapter.addEmap;
 adapter.addFormat = globalAdapter.addFormat;
+adapter.config = globalAdapter.config;
 
 export default adapter;
+
+export { Adapter };

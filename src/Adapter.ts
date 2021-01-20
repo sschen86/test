@@ -10,19 +10,32 @@ const types = {
 
 export default Adapter;
 
-function Adapter({ strict = DEFAULT.strict, clears = DEFAULT.clears }) {
+function Adapter({ strict = DEFAULT.strict, clears = DEFAULT.clears } = {}) {
   const globalEnums = {};
   const globalEmaps = {};
   const globalFormats = {};
+
+  let globalStrict = strict;
+  let globalClears = clears;
 
   this.addEnum = createAdd(globalEnums);
   this.addEmap = createAdd(globalEmaps);
   this.addFormat = createAdd(globalFormats);
   this.create = createTransform;
+  this.config = ({ strict = undefined, clears = undefined }) => {
+    if (typeof strict === 'boolean') {
+      globalStrict = strict;
+    }
+    if (clears === true) {
+      globalClears = DEFAULT.clears;
+    } else if (Array.isArray(clears)) {
+      globalClears = clears;
+    }
+  };
 
   function createTransform(setting) {
-    const { $strict = strict, $clears } = setting;
-    const $clearsValues = $clears === true ? clears : $clears || [];
+    const { $strict = globalStrict, $clears } = setting;
+    const $clearsValues = $clears === true ? globalClears : $clears || [];
     const allRules = {};
 
     addRules([], setting);

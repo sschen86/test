@@ -2,7 +2,7 @@
 // https://github.com/sschen86/ijest
 
 import ijest from 'ijest';
-import adapter from '../src';
+import adapter, { Adapter } from '../src';
 
 import testKey from './command/key';
 import testDefault from './command/default';
@@ -23,6 +23,8 @@ import multiLevels from './common/multi-levels';
 import multiRules from './common/multi-rules';
 import context from './common/context';
 
+import config from './method/config';
+
 import normal from './example/normal';
 
 const date = new Date();
@@ -31,6 +33,7 @@ ijest({
   // 上下文环境
   context: {
     adapter,
+    Adapter,
     now: date,
     data: {
       price: 1.11,
@@ -64,6 +67,7 @@ ijest({
     multiLevels,
     multiRules,
     context,
+    config,
     normal,
   },
   asserts: {},
