@@ -1,0 +1,597 @@
+import React, { useEffect, useState } from 'react';
+import { FormProps, FormItemProps } from 'antd/lib/form';
+import { SelectProps } from 'antd/lib/select';
+import { InputProps } from 'antd/lib/input';
+import { Button, Form, Input, Space, Spin } from 'antd';
+
+interface SMFormOption {
+  // antd Form组件原生配置项
+  props?: FormProps;
+
+  // 表单项属性配置
+  itemProps?: {
+    // 表单项最小宽度
+    minWidth?: number;
+  };
+
+  // 组件的初始值
+  initialValue?: FormProps['initialValues'];
+
+  // 组件的值
+  value?: FormProps['initialValues'];
+
+  fields: Array<GroupFieldConfig | FieldConfig>;
+
+  // 自定义底部提交
+  footer?: true | JSX.Element;
+
+  // 启用提交时锁定表单
+  loadingLock?: true;
+
+  // 锁定配置项，提升性能
+  // fieldsLock?: true;
+
+  // 节流阀，默认300ms
+  throttle?: number;
+
+  // 提交时触发的钩子
+  onSubmit?: (error, values) => void;
+
+  // 改变时触发的钩子
+  onChange?: (error, values) => void;
+}
+
+interface GroupFieldConfig {
+  title: string | (() => JSX.Element | string); // 分组标题
+  items: Array<FieldConfig>; // 分组子级配置项
+  column?: 1 | 2 | 3 | 4; // 几列布局
+}
+
+// 自定义了字段的配置项
+type BaseFieldConfig = {
+  // 官方配置项
+  props?: FormItemProps;
+
+  itemProps?: SelectProps<any> | InputProps; // 官方额外的props配置项;
+
+  // 是否在渲染树中可见
+  visible?: boolean | ((option) => boolean);
+
+  // 表单类型
+  type?:
+    | 'input'
+    | 'select'
+    | 'text'
+    | 'textarea'
+    | 'radio'
+    | 'custom'
+    | 'password'
+    | 'checkbox'
+    | 'hidden'
+    | 'switch'
+    | 'date'
+    | 'dateRange';
+
+  // 选项数据列表
+  options?: Array<{
+    label: string;
+    value: string | number;
+    disabled?: boolean;
+  }>;
+
+  // 选项数据加载器
+  optionsLoader?: {
+    // 监听的表单列表，值
+    effects: Array<string>;
+
+    // 数据源
+    dataSource: (
+      formValues
+    ) => BaseFieldConfig['options'] | Promise<BaseFieldConfig['options']>;
+  };
+
+  // 内容宽度
+  width?: number;
+
+  // 自定义渲染函数
+  render?(fieldConfig): React.ReactNode;
+
+  // 是否去除首尾空格
+  trim?: boolean;
+
+  // 表单校验，同官方
+  rules?: FormItemProps['rules'];
+
+  // 表单联系，同官方
+  dependencies?: FormItemProps['dependencies'];
+
+  // 是否禁用表单
+  disabled?: boolean | ((option) => boolean);
+
+  // 最大长度，同官方
+  maxlength?: number;
+
+  // 输入框提示文案，同官方
+  placeholder?: string;
+
+  // 额外提示文案
+  tips?: string | ((fieldConfig) => JSX.Element | string);
+};
+
+// 数组模式的配置项
+type ArrayFieldConfig = [string, string, BaseFieldConfig];
+
+// 对象模式的配置项
+type ObjectFieldConfig = BaseFieldConfig & { label: string; name: string };
+
+type FieldConfig = ArrayFieldConfig | ObjectFieldConfig;
+
+// 导出的对象接口
+interface SMFormInterface {
+  (): JSX.Element;
+
+  // 用于表单值锁定，，当值被设置过了，那么组件中的value项改变不会导致值发生变更
+  [VALUE_LOCK_KEY]?: boolean;
+
+  // 重置表单
+  readonly reset?: () => void;
+
+  // 提交表单
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  readonly submit?: () => Promise<any>;
+
+  // 锁定表单提交
+  readonly lockSubmit?: () => void;
+
+  // 解锁表单提交
+  readonly unlockSubmit?: () => void;
+
+  // 设置表单的值
+  readonly setValue?: (value) => void;
+
+  // 设置表单的值，会先清除在设置
+  readonly reloadValue?: (value) => void;
+
+  // 清空表单的值
+  readonly clearValue?: () => void;
+
+  // 设置测试的值
+  readonly changeTestValue?: (value) => void;
+}
+
+// 用于锁定表单的值
+const VALUE_LOCK_KEY = Symbol('VALUE_LOCK_KEY');
+
+// 暂存表单上一次的值
+const VALUE_KEY = Symbol('VALUE_KEY');
+
+// 配置项缓存
+const OPTION_CACHE_KEY = Symbol('OPTION_CACHE_KEY');
+
+// 组件数据暂存
+const STORAGE_KEY = Symbol('STORAGE_KEY');
+
+// 储存表单字段配置项
+const FORM_ITEMS_KEY = Symbol('FORM_ITEMS_KEY');
+
+// 组件初始化方法
+function useSMForm(option: SMFormOption) {
+  const SMFormFactory: SMFormInterface = () => {
+    const {
+      props = {},
+      fields,
+      initialValue = {},
+      value = {},
+      footer = null,
+      onSubmit,
+      onChange,
+      loadingLock = false,
+      throttle = 300,
+      minWidth = 400,
+      // fieldsLock = false,
+    } = SMForm[OPTION_CACHE_KEY];
+
+    const [form] = Form.useForm();
+
+    // 表单提交/重置按钮加载状态
+    const [submitLoading, submitLoadingSet] = useState(false);
+
+    useEffect(() => {
+      console.warn('SMForm.mouted');
+    }, []);
+
+    exportInterface({
+      SMForm,
+      form,
+      submitLoadingSet,
+      onSubmit,
+      onChange,
+    });
+
+    const formOnBlur = formOnBlurFactory({
+      SMForm,
+      form,
+      onBlur: props.onBlur,
+    });
+
+    useEffect(() => {
+      const nextValue = value;
+      if (
+        !SMForm[VALUE_LOCK_KEY] &&
+        JSON.stringify(SMForm[VALUE_KEY]) !== JSON.stringify(nextValue)
+      ) {
+        SMForm[VALUE_KEY] = nextValue;
+        SMForm.setValue(nextValue);
+        SMForm[VALUE_LOCK_KEY] = false;
+      }
+    }, [value]);
+
+    // maxColumn 最大列配置项，用于运算每个单元格占用的网格大小
+    const globalConfig: { maxColumn: number; initialValue: any } = {
+      maxColumn: 1,
+      initialValue,
+    };
+
+    useEffect(() => {
+      initFormViews({ SMForm, fields, globalConfig });
+    }, [fields]);
+
+    console.info('render');
+
+    return (
+      <Spin spinning={loadingLock && submitLoading} tip="表单提交中...">
+        <Form
+          form={form}
+          colon={false}
+          labelCol={{ span: 6 }}
+          wrapperCol={{ span: 16 }}
+          {...props}
+          onBlur={formOnBlur}
+          onValuesChange={ThrottleFactory(
+            (formValueChange, formValue) => {
+              formValueOnChange({
+                SMForm,
+                formValueChange,
+                formValue,
+                onChange,
+              });
+            },
+            { SMForm, interval: throttle }
+          )}
+        >
+          <Form.Item name="name" label="xxx" rules={[{ required: true }]}>
+            <Input />
+          </Form.Item>
+          {footer === true
+            ? renderDefaultFooter({ SMForm, submitLoading })
+            : footer}
+        </Form>
+      </Spin>
+    );
+  };
+
+  const [SMForm] = useState(() => {
+    SMFormFactory[VALUE_LOCK_KEY] = false;
+    return SMFormFactory;
+  });
+
+  SMForm[OPTION_CACHE_KEY] = option;
+  SMForm[STORAGE_KEY] = {
+    throttleFactoryEnv: {
+      lastTime: undefined, // 上一次触发的时间
+      isLock: false, // 是否锁定状态
+    },
+
+    // 暂存正在加载中的字段
+    formValueLoading: {},
+
+    // 表单组配置项
+    formViews: [],
+
+    // 表单配置项
+    formItems: [],
+  };
+
+  return SMForm;
+}
+
+// 导出接口
+function exportInterface({
+  SMForm,
+  form,
+  submitLoadingSet,
+  onSubmit = null,
+  onChange = undefined,
+}) {
+  Object.assign(SMForm, {
+    reset() {
+      SMForm[VALUE_LOCK_KEY] = true;
+      const formValue = form.getFieldsValue();
+      form.resetFields();
+      triggerFormValueChange(formValue);
+    },
+    submit() {
+      const result = form.validateFields();
+      if (onSubmit) {
+        const onSubmitResult = onSubmit(result);
+
+        if (onSubmitResult instanceof Promise) {
+          submitLoadingSet(true);
+          return onSubmitResult.finally(() => {
+            submitLoadingSet(false);
+          });
+        }
+        return Promise.resolve(onSubmitResult);
+      }
+      return result;
+    },
+    lockSubmit() {
+      submitLoadingSet(true);
+    },
+    unlockSubmit() {
+      submitLoadingSet(false);
+    },
+    setValue(value) {
+      SMForm[VALUE_LOCK_KEY] = true;
+      const formValue = form.getFieldsValue();
+      form.setFieldsValue(value);
+      triggerFormValueChange(formValue);
+    },
+    reloadValue(value) {
+      SMForm.setValue({
+        ...getEmptyFormValue(),
+        ...value,
+      });
+    },
+    clearValue() {
+      SMForm.setValue(getEmptyFormValue());
+    },
+  });
+
+  // 获取表单的所有空值
+  function getEmptyFormValue() {
+    const formValue = form.getFieldsValue();
+    const formValueNext = {};
+    for (const name in formValue) {
+      formValueNext[name] = undefined;
+    }
+    return formValueNext;
+  }
+
+  // 触发表单更新的事件
+  function triggerFormValueChange(formValueOld) {
+    const formValue = form.getFieldsValue();
+    const formValueChange = {};
+    for (const key in formValue) {
+      if (formValue[key] !== formValueOld[key]) {
+        formValueChange[key] = formValue[key];
+      }
+    }
+    if (Object.keys(formValueChange).length > 0) {
+      formValueOnChange({ SMForm, formValueChange, formValue, onChange });
+    }
+  }
+}
+
+// 渲染底部操作按钮
+function renderDefaultFooter({ SMForm, submitLoading }) {
+  return (
+    <Form.Item label=" " colon={false}>
+      <Space>
+        <Button onClick={() => SMForm.reset()} loading={submitLoading}>
+          重置
+        </Button>
+        <Button
+          type="primary"
+          onClick={() => SMForm.submit()}
+          loading={submitLoading}
+        >
+          提交
+        </Button>
+      </Space>
+    </Form.Item>
+  );
+}
+
+// 表单元素失去焦点的处理逻辑
+function formOnBlurFactory({ SMForm, form, onBlur = undefined }) {
+  return (event) => {
+    const { id, value } = event.target;
+    const formItem = SMForm[STORAGE_KEY].formItems[id];
+    if (formItem && formItem.trim) {
+      form.setFieldsValue({ [id]: value.trim() });
+    }
+    onBlur && onBlur(event);
+  };
+}
+
+// 表单值改变的处理逻辑
+function formValueOnChange({
+  SMForm,
+  formValueChange,
+  formValue,
+  onChange = undefined,
+}) {
+  SMForm[VALUE_LOCK_KEY] = true;
+  onChange && onChange(formValueChange, formValue);
+}
+
+// 节流阀
+function ThrottleFactory(fn, { SMForm, interval = 333 }) {
+  const { throttleFactoryEnv } = SMForm[STORAGE_KEY];
+
+  return (...args) => {
+    const now = Date.now();
+
+    const { lastTime, isLock } = throttleFactoryEnv;
+
+    // 第一次或者时间满足间隔了，直接触发
+    if (!lastTime || now - lastTime > interval) {
+      throttleFactoryEnv.lastTime = now;
+      fn(...args);
+      return;
+    }
+
+    // 还不能满足触发条件的，放入监听
+    if (!isLock) {
+      throttleFactoryEnv.isLock = true;
+      setTimeout(() => {
+        throttleFactoryEnv.isLock = false;
+        throttleFactoryEnv.lastTime = Date.now();
+        try {
+          // 当组件被释放了，处理异常
+          fn(...args);
+        } catch (err) {
+          // ...
+        }
+      }, interval - (now - lastTime));
+    }
+  };
+}
+
+// 初始化表单渲染项
+function initFormViews({ SMForm, fields, globalConfig }) {
+  const formViews = [];
+  const formItems = {};
+
+  fields.forEach((config) => {
+    if (config.title !== undefined) {
+      // 生成 formGroup配置
+      initFormGroup({ SMForm, formViews, formItems, config, globalConfig });
+    } else {
+      // 生成formItem配置
+      initFormItem({ SMForm, formViews, formItems, config, globalConfig });
+    }
+  });
+
+  SMForm[STORAGE_KEY].formViews = formViews;
+  SMForm[STORAGE_KEY].formItems = formItems;
+
+  console.info(SMForm[STORAGE_KEY]);
+}
+
+// 初始化表单组
+function initFormGroup({ SMForm, formViews, formItems, config, globalConfig }) {
+  const title =
+    typeof config.title === 'function' ? config.title() : config.title;
+  // 分组配置项
+
+  const formGroup = {
+    ...config,
+    title,
+    type: 'group',
+    formItems: [],
+  };
+
+  formViews.push(formGroup);
+
+  if (config.column > globalConfig.maxColumn) {
+    globalConfig.maxColumn = config.column;
+  }
+
+  // 批量处理子级配置项
+  config.items.forEach((item) => {
+    initFormItem({
+      SMForm,
+      formViews: formGroup.formItems,
+      formItems,
+      config: item,
+      globalConfig,
+    });
+  });
+}
+
+// 初始化表单项
+function initFormItem({
+  SMForm,
+  formViews,
+  formItems,
+  config,
+  globalConfig: { initialValue },
+}) {
+  let label: ObjectFieldConfig['label'];
+  let name: ObjectFieldConfig['name'];
+  let baseFieldConfig: BaseFieldConfig;
+
+  if (Array.isArray(config)) {
+    [label, name, baseFieldConfig = {}] = config;
+  } else {
+    let rest;
+    ({ label, name, ...rest } = config);
+    baseFieldConfig = rest;
+  }
+
+  const { visible } = baseFieldConfig;
+
+  // 不可见，或者返回值不可见，该字段直接过滤
+  if (
+    visible === false ||
+    (typeof visible === 'function' && visible(baseFieldConfig) === false)
+  ) {
+    return;
+  }
+
+  const { type, options, render, props, itemProps } = baseFieldConfig;
+
+  const viewConfig: any = {
+    ...baseFieldConfig,
+    formItemProps: {
+      ...props,
+      label,
+      name,
+    },
+    itemProps: {
+      ...itemProps,
+    },
+    name,
+    type,
+  };
+
+  // 设置默认type
+  if (!type) {
+    viewConfig.type = viewConfig.options ? 'select' : 'input';
+  }
+
+  // 设置初始值
+  if (initialValue[name] !== undefined) {
+    viewConfig.initialValue = initialValue[name];
+  }
+
+  // 设置自定义渲染函数
+  if (viewConfig.render) {
+    viewConfig.type = 'custom';
+    viewConfig.render = () => render(viewConfig);
+  }
+
+  // 设置提示信息
+  if (typeof viewConfig.tips === 'function') {
+    viewConfig.tips = viewConfig.tips(viewConfig);
+  }
+
+  formViews.push(
+    (formItems[name] = {
+      loading: false,
+      loadingValue: false,
+      viewConfig,
+    })
+  );
+}
+
+// 渲染表单UI
+function renderFormViews() {
+  // ...
+}
+
+// 渲染表单组
+function renderFormGroup() {
+  // ..
+}
+
+// 渲染表单项
+function renderFormItem() {
+  // ..
+}
+
+export default useSMForm;
+
+export { SMFormOption };
