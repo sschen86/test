@@ -2,9 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { FormProps, FormItemProps } from 'antd/lib/form';
 import { SelectProps } from 'antd/lib/select';
 import { InputProps } from 'antd/lib/input';
-import { Button, Form, Input, Space, Spin } from 'antd';
+import { Button, Col, Form, Input, Row, Space, Spin } from 'antd';
+import formItemFactory from './formItemFactory';
 
-interface SMFormOption {
+interface OCFormOption {
   // antd Form组件原生配置项
   props?: FormProps;
 
@@ -82,7 +83,7 @@ type BaseFieldConfig = {
   // 选项数据加载器
   optionsLoader?: {
     // 监听的表单列表，值
-    effects: Array<string>;
+    effects: Array<string | ((formValue) => any)>;
 
     // 数据源
     dataSource: (
@@ -127,11 +128,14 @@ type ObjectFieldConfig = BaseFieldConfig & { label: string; name: string };
 type FieldConfig = ArrayFieldConfig | ObjectFieldConfig;
 
 // 导出的对象接口
-interface SMFormInterface {
+interface OCFormInterface {
   (): JSX.Element;
 
   // 用于表单值锁定，，当值被设置过了，那么组件中的value项改变不会导致值发生变更
   [VALUE_LOCK_KEY]?: boolean;
+
+  // 原生表单实例
+  form?: any;
 
   // 重置表单
   readonly reset?: () => void;
@@ -147,7 +151,7 @@ interface SMFormInterface {
   readonly unlockSubmit?: () => void;
 
   // 设置表单的值
-  readonly setValue?: (value) => void;
+  readonly setValue?: (value, option?: { ignoreOnChange?: boolean }) => void;
 
   // 设置表单的值，会先清除在设置
   readonly reloadValue?: (value) => void;
@@ -157,6 +161,9 @@ interface SMFormInterface {
 
   // 设置测试的值
   readonly changeTestValue?: (value) => void;
+
+  // 触发表单重新渲染
+  readonly forceUpdate?: () => void;
 }
 
 // 用于锁定表单的值
@@ -175,8 +182,8 @@ const STORAGE_KEY = Symbol('STORAGE_KEY');
 const FORM_ITEMS_KEY = Symbol('FORM_ITEMS_KEY');
 
 // 组件初始化方法
-function useSMForm(option: SMFormOption) {
-  const SMFormFactory: SMFormInterface = () => {
+function useOCForm(option: OCFormOption) {
+  const OCFormFactory: OCFormInterface = () => {
     const {
       props = {},
       fields,
@@ -189,7 +196,7 @@ function useSMForm(option: SMFormOption) {
       throttle = 300,
       minWidth = 400,
       // fieldsLock = false,
-    } = SMForm[OPTION_CACHE_KEY];
+    } = OCForm[OPTION_CACHE_KEY];
 
     const [form] = Form.useForm();
 
@@ -197,11 +204,11 @@ function useSMForm(option: SMFormOption) {
     const [submitLoading, submitLoadingSet] = useState(false);
 
     useEffect(() => {
-      console.warn('SMForm.mouted');
+      console.warn('OCForm.mouted');
     }, []);
 
-    exportInterface({
-      SMForm,
+    ExportInterface({
+      OCForm,
       form,
       submitLoadingSet,
       onSubmit,
@@ -209,22 +216,10 @@ function useSMForm(option: SMFormOption) {
     });
 
     const formOnBlur = formOnBlurFactory({
-      SMForm,
+      OCForm,
       form,
       onBlur: props.onBlur,
     });
-
-    useEffect(() => {
-      const nextValue = value;
-      if (
-        !SMForm[VALUE_LOCK_KEY] &&
-        JSON.stringify(SMForm[VALUE_KEY]) !== JSON.stringify(nextValue)
-      ) {
-        SMForm[VALUE_KEY] = nextValue;
-        SMForm.setValue(nextValue);
-        SMForm[VALUE_LOCK_KEY] = false;
-      }
-    }, [value]);
 
     // maxColumn 最大列配置项，用于运算每个单元格占用的网格大小
     const globalConfig: { maxColumn: number; initialValue: any } = {
@@ -233,10 +228,23 @@ function useSMForm(option: SMFormOption) {
     };
 
     useEffect(() => {
-      initFormViews({ SMForm, fields, globalConfig });
+      initFormViews({ OCForm, fields, globalConfig });
+      OCForm.forceUpdate();
     }, [fields]);
 
-    console.info('render');
+    useEffect(() => {
+      const nextValue = value;
+      if (
+        !OCForm[VALUE_LOCK_KEY] &&
+        JSON.stringify(OCForm[VALUE_KEY]) !== JSON.stringify(nextValue)
+      ) {
+        OCForm[VALUE_KEY] = nextValue;
+        OCForm.setValue(nextValue, { ignoreOnChange: true });
+        OCForm[VALUE_LOCK_KEY] = false;
+      }
+    }, [value]);
+
+    console.info('OCForm.render');
 
     return (
       <Spin spinning={loadingLock && submitLoading} tip="表单提交中...">
@@ -249,34 +257,37 @@ function useSMForm(option: SMFormOption) {
           onBlur={formOnBlur}
           onValuesChange={ThrottleFactory(
             (formValueChange, formValue) => {
-              formValueOnChange({
-                SMForm,
-                formValueChange,
-                formValue,
+              setFormValue({
+                OCForm,
+                form,
+                value: formValueChange,
                 onChange,
+                lockSet: true,
               });
+              // formValueOnChange({
+              //   OCForm,
+              //   formValueChange,
+              //   formValue,
+              //   onChange,
+              // });
             },
-            { SMForm, interval: throttle }
+            { OCForm, interval: throttle }
           )}
         >
-          <Form.Item name="name" label="xxx" rules={[{ required: true }]}>
-            <Input />
-          </Form.Item>
+          {renderFormViews({ OCForm })}
           {footer === true
-            ? renderDefaultFooter({ SMForm, submitLoading })
+            ? renderDefaultFooter({ OCForm, submitLoading })
             : footer}
         </Form>
       </Spin>
     );
   };
 
-  const [SMForm] = useState(() => {
-    SMFormFactory[VALUE_LOCK_KEY] = false;
-    return SMFormFactory;
+  const [OCForm] = useState(() => {
+    OCFormFactory[VALUE_LOCK_KEY] = false;
+    return OCFormFactory;
   });
-
-  SMForm[OPTION_CACHE_KEY] = option;
-  SMForm[STORAGE_KEY] = {
+  const [storage] = useState({
     throttleFactoryEnv: {
       lastTime: undefined, // 上一次触发的时间
       isLock: false, // 是否锁定状态
@@ -289,26 +300,39 @@ function useSMForm(option: SMFormOption) {
     formViews: [],
 
     // 表单配置项
-    formItems: [],
-  };
+    formItems: {},
 
-  return SMForm;
+    // 表单的值
+    formValue: {},
+
+    // 加载中的表单
+  });
+
+  OCForm[OPTION_CACHE_KEY] = option;
+  OCForm[STORAGE_KEY] = storage;
+
+  return OCForm;
 }
 
 // 导出接口
-function exportInterface({
-  SMForm,
+function ExportInterface({
+  OCForm,
   form,
   submitLoadingSet,
   onSubmit = null,
   onChange = undefined,
 }) {
-  Object.assign(SMForm, {
+  const [refreshSymbol, refreshSymbolSet] = useState(0);
+
+  Object.assign(OCForm, {
+    form,
     reset() {
-      SMForm[VALUE_LOCK_KEY] = true;
-      const formValue = form.getFieldsValue();
+      OCForm[VALUE_LOCK_KEY] = true;
+      // const formValue = form.getFieldsValue();
       form.resetFields();
-      triggerFormValueChange(formValue);
+      OCForm.setValue(form.getFieldsValue(), { ignoreOnChange: true });
+      // setFormValue({ OCForm, form, value: form.getFieldsValue(), onChange });
+      // triggerFormValueChange(formValue);
     },
     submit() {
       const result = form.validateFields();
@@ -331,20 +355,29 @@ function exportInterface({
     unlockSubmit() {
       submitLoadingSet(false);
     },
-    setValue(value) {
-      SMForm[VALUE_LOCK_KEY] = true;
-      const formValue = form.getFieldsValue();
-      form.setFieldsValue(value);
-      triggerFormValueChange(formValue);
+    setValue(value, option) {
+      OCForm[VALUE_LOCK_KEY] = true;
+      setFormValue({ OCForm, form, value, onChange, option });
+      // const formValue = form.getFieldsValue();
+      // form.setFieldsValue(value);
+      // triggerFormValueChange(formValue);
     },
     reloadValue(value) {
-      SMForm.setValue({
+      OCForm.setValue({
         ...getEmptyFormValue(),
         ...value,
       });
     },
     clearValue() {
-      SMForm.setValue(getEmptyFormValue());
+      OCForm.setValue(getEmptyFormValue());
+    },
+    forceUpdate(cmd?, message?) {
+      // 回填加载完成的列表
+      if (cmd === 'optionsLoader.success') {
+        const { formValue } = OCForm[STORAGE_KEY];
+        form.setFieldsValue({ [message]: formValue[message] });
+      }
+      refreshSymbolSet(refreshSymbol + 1);
     },
   });
 
@@ -359,31 +392,100 @@ function exportInterface({
   }
 
   // 触发表单更新的事件
-  function triggerFormValueChange(formValueOld) {
-    const formValue = form.getFieldsValue();
-    const formValueChange = {};
-    for (const key in formValue) {
-      if (formValue[key] !== formValueOld[key]) {
-        formValueChange[key] = formValue[key];
-      }
-    }
-    if (Object.keys(formValueChange).length > 0) {
-      formValueOnChange({ SMForm, formValueChange, formValue, onChange });
-    }
-  }
+  // function triggerFormValueChange(formValueOld) {
+  //   const formValue = form.getFieldsValue();
+  //   const formValueChange = {};
+  //   for (const key in formValue) {
+  //     if (formValue[key] !== formValueOld[key]) {
+  //       formValueChange[key] = formValue[key];
+  //     }
+  //   }
+  //   if (Object.keys(formValueChange).length > 0) {
+  //     formValueOnChange({ OCForm, formValueChange, formValue, onChange });
+  //   }
+  // }
 }
 
+// 拦截内置的form.setFieldsValue
+function setFormValue({
+  OCForm,
+  form,
+  value,
+  onChange,
+  lockSet = false,
+  option = {},
+}) {
+  const storage = OCForm[STORAGE_KEY];
+  const { formItems, formValue } = storage;
+  const { ignoreOnChange }: any = option;
+
+  const formValueChange = {};
+  for (const key in value) {
+    if (value[key] !== formValue[key] && formItems[key]) {
+      formValueChange[key] = value[key];
+    }
+  }
+
+  // 表单值真正被改变
+  if (Object.keys(formValueChange).length === 0) {
+    return;
+  }
+
+  formValueOnChange({
+    OCForm,
+    formValueChange,
+    formValue: (storage.formValue = { ...formValue, ...value }),
+    onChange: ignoreOnChange ? null : onChange,
+  });
+
+  setTimeout(() => {
+    // 根据表单项是否加载决定是否设置值
+    const formValueSets = {};
+
+    Object.keys(formValueChange).forEach((name) => {
+      const { loading, viewConfig } = formItems[name];
+      if (!loading) {
+        formValueSets[name] = formValueChange[name];
+      }
+    });
+
+    const formValueLock = {};
+
+    Object.keys(formItems).forEach((name) => {
+      const { loading } = formItems[name];
+      if (loading) {
+        formValueLock[name] = undefined;
+      } else if (formValueChange.hasOwnProperty(name)) {
+        formValueSets[name] = formValueChange[name];
+      }
+    });
+
+    // 设置加载中的表单
+    form.setFieldsValue(formValueLock);
+
+    // 表单值真正被改变
+    if (Object.keys(formValueSets).length > 0) {
+      !lockSet && form.setFieldsValue(formValueSets);
+    }
+  });
+}
+
+// // 获取值
+// function getFormValue(){
+
+// }
+
 // 渲染底部操作按钮
-function renderDefaultFooter({ SMForm, submitLoading }) {
+function renderDefaultFooter({ OCForm, submitLoading }) {
   return (
     <Form.Item label=" " colon={false}>
       <Space>
-        <Button onClick={() => SMForm.reset()} loading={submitLoading}>
+        <Button onClick={() => OCForm.reset()} loading={submitLoading}>
           重置
         </Button>
         <Button
           type="primary"
-          onClick={() => SMForm.submit()}
+          onClick={() => OCForm.submit()}
           loading={submitLoading}
         >
           提交
@@ -394,10 +496,10 @@ function renderDefaultFooter({ SMForm, submitLoading }) {
 }
 
 // 表单元素失去焦点的处理逻辑
-function formOnBlurFactory({ SMForm, form, onBlur = undefined }) {
+function formOnBlurFactory({ OCForm, form, onBlur = undefined }) {
   return (event) => {
     const { id, value } = event.target;
-    const formItem = SMForm[STORAGE_KEY].formItems[id];
+    const formItem = OCForm[STORAGE_KEY].formItems[id];
     if (formItem && formItem.trim) {
       form.setFieldsValue({ [id]: value.trim() });
     }
@@ -407,18 +509,36 @@ function formOnBlurFactory({ SMForm, form, onBlur = undefined }) {
 
 // 表单值改变的处理逻辑
 function formValueOnChange({
-  SMForm,
+  OCForm,
   formValueChange,
   formValue,
   onChange = undefined,
 }) {
-  SMForm[VALUE_LOCK_KEY] = true;
+  OCForm[VALUE_LOCK_KEY] = true;
+
+  const { formItems } = OCForm[STORAGE_KEY];
+  Object.keys(formItems).some((key) => {
+    const formItem = formItems[key];
+    if (
+      formItem.viewConfig.optionsLoader &&
+      formItem.viewConfig.optionsLoader.effects
+        .filter((effect) => typeof effect === 'string')
+
+        // effects中的name在改变的值中
+        .some((effectKey) => Object.keys(formValueChange).includes(effectKey))
+    ) {
+      OCForm.forceUpdate();
+      return true;
+    }
+    return false;
+  });
+
   onChange && onChange(formValueChange, formValue);
 }
 
 // 节流阀
-function ThrottleFactory(fn, { SMForm, interval = 333 }) {
-  const { throttleFactoryEnv } = SMForm[STORAGE_KEY];
+function ThrottleFactory(fn, { OCForm, interval = 333 }) {
+  const { throttleFactoryEnv } = OCForm[STORAGE_KEY];
 
   return (...args) => {
     const now = Date.now();
@@ -450,28 +570,28 @@ function ThrottleFactory(fn, { SMForm, interval = 333 }) {
 }
 
 // 初始化表单渲染项
-function initFormViews({ SMForm, fields, globalConfig }) {
+function initFormViews({ OCForm, fields, globalConfig }) {
   const formViews = [];
   const formItems = {};
 
   fields.forEach((config) => {
     if (config.title !== undefined) {
       // 生成 formGroup配置
-      initFormGroup({ SMForm, formViews, formItems, config, globalConfig });
+      initFormGroup({ OCForm, formViews, formItems, config, globalConfig });
     } else {
       // 生成formItem配置
-      initFormItem({ SMForm, formViews, formItems, config, globalConfig });
+      initFormItem({ OCForm, formViews, formItems, config, globalConfig });
     }
   });
+  // console.info({ formItems });
+  OCForm[STORAGE_KEY].formViews = formViews;
+  OCForm[STORAGE_KEY].formItems = formItems;
 
-  SMForm[STORAGE_KEY].formViews = formViews;
-  SMForm[STORAGE_KEY].formItems = formItems;
-
-  console.info(SMForm[STORAGE_KEY]);
+  // console.info(OCForm[STORAGE_KEY]);
 }
 
 // 初始化表单组
-function initFormGroup({ SMForm, formViews, formItems, config, globalConfig }) {
+function initFormGroup({ OCForm, formViews, formItems, config, globalConfig }) {
   const title =
     typeof config.title === 'function' ? config.title() : config.title;
   // 分组配置项
@@ -492,7 +612,7 @@ function initFormGroup({ SMForm, formViews, formItems, config, globalConfig }) {
   // 批量处理子级配置项
   config.items.forEach((item) => {
     initFormItem({
-      SMForm,
+      OCForm,
       formViews: formGroup.formItems,
       formItems,
       config: item,
@@ -503,7 +623,7 @@ function initFormGroup({ SMForm, formViews, formItems, config, globalConfig }) {
 
 // 初始化表单项
 function initFormItem({
-  SMForm,
+  OCForm,
   formViews,
   formItems,
   config,
@@ -568,30 +688,197 @@ function initFormItem({
     viewConfig.tips = viewConfig.tips(viewConfig);
   }
 
+  const formItemPrev = OCForm[STORAGE_KEY].formItems[name];
+
   formViews.push(
     (formItems[name] = {
       loading: false,
       loadingValue: false,
+      ...formItemPrev,
       viewConfig,
     })
   );
 }
 
 // 渲染表单UI
-function renderFormViews() {
-  // ...
+function renderFormViews({ OCForm }) {
+  const storage = OCForm[STORAGE_KEY];
+  const { formViews } = storage;
+
+  return formViews.map((formView) => {
+    const { type } = formView;
+    if (type === 'group') {
+      return renderFormGroup({ OCForm, formView });
+    }
+    return renderFormItem({ OCForm, formView });
+  });
 }
 
 // 渲染表单组
-function renderFormGroup() {
-  // ..
+function renderFormGroup({ OCForm, formView }) {
+  const { title, column = 1, formItems } = formView;
+  const formItemsClone = formItems.slice();
+
+  const fieldsAllJSX = [];
+  let formItemConfig;
+  while (true) {
+    const fieldsJSX = [];
+    let key;
+    for (let i = 0; i < column; i++) {
+      formItemConfig = formItemsClone.shift();
+      if (formItemConfig) {
+        key = formItemConfig.name;
+        fieldsJSX.push(
+          renderFormItem({
+            OCForm,
+            formView: formItemConfig,
+          })
+        );
+      }
+    }
+
+    if (fieldsJSX.length) {
+      fieldsAllJSX.push(<Row key={key}>{fieldsJSX.map((item) => item)}</Row>);
+    }
+
+    if (!formItemConfig) {
+      break;
+    }
+  }
+
+  return (
+    <div style={{ paddingBottom: 24 }} key={title}>
+      <h3>{title}</h3>
+      {fieldsAllJSX.map((item) => item)}
+    </div>
+  );
 }
 
 // 渲染表单项
-function renderFormItem() {
-  // ..
+function renderFormItem({ OCForm, formView }) {
+  const { viewConfig } = formView;
+  const {
+    type,
+    width,
+    maxlength,
+    disabled,
+    options,
+    render,
+    placeholder,
+    visible,
+    props,
+    tips,
+    optionsLoader,
+    ...restConfig
+  } = viewConfig;
+
+  const itemDisabled =
+    typeof disabled === 'function' ? disabled(viewConfig) : disabled;
+
+  const formItemContent = formItemFactory({
+    OCForm,
+    storage: OCForm[STORAGE_KEY],
+    formItem: formView,
+  });
+
+  return (
+    <Col
+      // span={span}
+      key={viewConfig.name}
+      // style={{ minWidth, display: type === 'hidden' ? 'none' : '' }}
+    >
+      <Form.Item {...viewConfig.formItemProps}>{formItemContent}</Form.Item>
+    </Col>
+  );
 }
 
-export default useSMForm;
+export default useOCForm;
 
-export { SMFormOption };
+export { OCFormOption };
+
+
+
+import React from 'react';
+import { Input, Select } from 'antd';
+
+const factorys = {
+  input: (viewConfig) => (
+    <Input disabled={false} maxLength={60} placeholder="xxx" />
+  ),
+  select: ({ OCForm, storage, formItem }) => {
+    const { viewConfig, effectValues, loading } = formItem;
+    const { options, optionsLoader, itemProps } = viewConfig;
+
+    let selectOptions = formItem.options || options;
+    let selectLoading = loading;
+
+    // 下拉列表动态加载
+    if (optionsLoader) {
+      const { formValue } = storage;
+      const { dataSource, effects } = optionsLoader;
+      let isModify = false;
+
+      const nextEffectValues = [];
+      effects.forEach((effect, i) => {
+        const nextEffectValue =
+          typeof effect === 'function' ? effect(formValue) : formValue[effect];
+
+        if (!effectValues || effectValues[i] !== nextEffectValue) {
+          isModify = true;
+        }
+        nextEffectValues.push(nextEffectValue);
+      });
+
+      //   存在变更
+      if (isModify) {
+        const data = dataSource(formValue);
+
+        if (data instanceof Promise) {
+          // 异步加载的数据源
+          formItem.options = selectOptions = [];
+          formItem.loading = selectLoading = true;
+          data
+            .then((data) => {
+              formItem.options = data;
+              formItem.loading = false;
+              OCForm.forceUpdate('optionsLoader.success', viewConfig.name);
+            })
+            .catch(() => {
+              // TODO:添加重新加载的逻辑...
+            })
+            .finally(() => {
+              // ...
+            });
+        } else {
+          // 直接返回的数据源
+          formItem.options = selectOptions = data;
+        }
+        formItem.effectValues = nextEffectValues;
+      }
+    }
+
+    // console.info('renderSelect', viewConfig);
+
+    return (
+      <Select
+        {...itemProps}
+        options={selectOptions}
+        loading={selectLoading}
+        placeholder={
+          selectLoading
+            ? '数据加载中...'
+            : viewConfig.placeholder ||
+              `请选择${viewConfig.formItemProps.label || ''}`
+        }
+      />
+    );
+  },
+};
+
+export default function formItemFactory({ OCForm, storage, formItem }) {
+  const { viewConfig } = formItem;
+  const { type } = viewConfig;
+  const content = factorys[type]({ OCForm, storage, formItem });
+
+  return content;
+}
